@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+spec:
+  selector:
+    matchLabels:
+      app: mongodb
+  serviceName: mongodb
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:7.0
+        ports:
+        - containerPort: 27017
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+
+        
+        # MongoDB exposes a TCP socket on 27017 when it is ready to accept connections. 
+        # app pods will not receive traffic until this passes.
+        readinessProbe:
+          tcpSocket:
+            port: 27017
+          initialDelaySeconds: 15   
+          periodSeconds: 10          
+          failureThreshold: 6        # allow up to 60s before marking unready
+          timeoutSeconds: 5
+
+        
+        #if MongoDB stops accepting connections kubernetes restarts the container.
+        # Longer initial delay than readiness to avoid restarting
+        # a healthy MongoDB that is still initializing.
+        livenessProbe:
+          tcpSocket:
+            port: 27017
+          initialDelaySeconds: 45   
+          periodSeconds: 20          
+          failureThreshold: 3        
+          timeoutSeconds: 5
+
+        volumeMounts:
+        - name: mongo-data
+          mountPath: /data/db
+
+  volumeClaimTemplates:
+  - metadata:
+      name: mongo-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: standard-rwo   # explicit GKE storage class
+      resources:
+        requests:
+          storage: 5Gi

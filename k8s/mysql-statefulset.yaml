@@ -48,31 +48,21 @@ spec:
             memory: 1Gi
 
         
-        # Kubernetes waits for this to pass before sending any
-        # traffic to MySQL. 
         readinessProbe:
-          exec:
-            command:
-            - bash
-            - -c
-            - "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD} --silent"
-          initialDelaySeconds: 20   
-          periodSeconds: 10          # check every 10 seconds
-          failureThreshold: 6        # allow up to 60s of failures before marking unready
+          tcpSocket:
+            port: 3306
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          failureThreshold: 6
           timeoutSeconds: 5
 
-        
-        # If MySQL stops responding entirely, Kubernetes will
-        # restart the container automatically.
+        # If MySQL stops accepting connections Kubernetes restarts it
         livenessProbe:
-          exec:
-            command:
-            - bash
-            - -c
-            - "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD} --silent"
-          initialDelaySeconds: 60   
-          periodSeconds: 20          
-          failureThreshold: 3        # restart after 3 consecutive failures (60s)
+          tcpSocket:
+            port: 3306
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          failureThreshold: 3
           timeoutSeconds: 5
 
         volumeMounts:
@@ -91,7 +81,7 @@ spec:
       name: mysql-data
     spec:
       accessModes: ["ReadWriteOnce"]
-      storageClassName: standard-rwo   
+      storageClassName: standard-rwo
       resources:
         requests:
           storage: 5Gi
