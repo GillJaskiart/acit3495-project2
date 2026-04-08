@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  serviceName: mysql
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MYSQL_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MYSQL_DATABASE
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MYSQL_PASSWORD
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+
+        
+        # Kubernetes waits for this to pass before sending any
+        # traffic to MySQL. 
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD} --silent"
+          initialDelaySeconds: 20   
+          periodSeconds: 10          # check every 10 seconds
+          failureThreshold: 6        # allow up to 60s of failures before marking unready
+          timeoutSeconds: 5
+
+        
+        # If MySQL stops responding entirely, Kubernetes will
+        # restart the container automatically.
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD} --silent"
+          initialDelaySeconds: 60   
+          periodSeconds: 20          
+          failureThreshold: 3        # restart after 3 consecutive failures (60s)
+          timeoutSeconds: 5
+
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+        - name: init-sql
+          mountPath: /docker-entrypoint-initdb.d
+
+      volumes:
+      - name: init-sql
+        configMap:
+          name: mysql-init-sql
+
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: standard-rwo   
+      resources:
+        requests:
+          storage: 5Gi
