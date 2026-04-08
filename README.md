@@ -1,635 +1,590 @@
-# acit3495-project-1
+# ACIT 3495 – Project 2: Kubernetes Deployment & Horizontal Scalability
 
-* Salome Chelsie Lele Wambo
-* Jaskirat Gill
-* Jessica Shokouhi
-
-## Overview
-
-This project implements a containerized microservices data collection system.
-
-The system consists of:
-
-- Enter Data Web App (Flask)
-- Authentication Service (Node.js)
-- MySQL Database
-- Analytics Service (Flask)
-- Show Results Web App (Flask)
-- MongoDB
-
-The Enter Data Service collects customer, product, and sales data.
-However, users must first be authenticated through the Authentication Service before they are allowed to submit data.
-The Analytics Service processes the collected data and stores results in MongoDB.
-The Show Results App displays the latest analytics to authenticated users.
-
-All services communicate over Docker Compose's internal network.
+**Course:** ACIT 3495 – Advanced Topics in IT Infrastructure  
+**Team:** Salome Chelsie Lele Wambo · Jaskirat Gill · Jessica Shokouhi  
+**Repository:** [github.com/GillJaskiart/acit3495-project2](https://github.com/GillJaskiart/acit3495-project2)  
+**Cloud Provider:** Google Cloud Platform (GKE) — Region: `us-east1`
 
 ---
 
-## Architecture Flow
+## Table of Contents
 
-1. **User accesses Enter Data Web App**
-
-   If not authenticated → user is redirected to `/login`.
-
-2. **Login Process**
-
-   The Enter Data app sends credentials to:
-   ```
-   auth-service:5001/login
-   ```
-   If valid, the Authentication Service returns a JWT token.
-   The token is stored in an HTTP-only cookie.
-
-3. **Accessing Protected Endpoints**
-
-   Before allowing access to:
-   ```
-   /
-   /product
-   /sale
-   ```
-   The Enter Data app verifies the token by calling:
-   ```
-   auth-service:5001/verify
-   ```
-   If the token is valid → request proceeds.
-   If invalid → user is redirected to login.
-
-4. **Analytics**
-
-   The Analytics Service reads from MySQL, calculates results, and stores them in MongoDB.
-   The Show Results App retrieves and displays the latest analytics from MongoDB.
+1. [Project Overview](#1-project-overview)
+2. [Architecture](#2-architecture)
+3. [Services](#3-services)
+4. [Technologies Used](#4-technologies-used)
+5. [Kubernetes Deployment](#5-kubernetes-deployment)
+6. [Horizontal Scalability](#6-horizontal-scalability)
+7. [CI/CD Pipeline](#7-cicd-pipeline)
+8. [Getting Started — Local (Docker Compose)](#8-getting-started--local-docker-compose)
+9. [Getting Started — Cloud (GKE)](#9-getting-started--cloud-gke)
+10. [API Endpoints](#10-api-endpoints)
+11. [Load Testing Results](#11-load-testing-results)
+12. [Design Decisions](#12-design-decisions)
+13. [Challenges & Solutions](#13-challenges--solutions)
+14. [Team Contributions](#14-team-contributions)
 
 ---
 
-## Technologies Used
+## 1. Project Overview
 
-**Enter Data Service**
-- Python 3.11
-- Flask
-- mysql-connector-python
+Project 2 extends the containerized microservices system built in Project 1 by deploying it to a managed **Kubernetes cluster on Google Cloud (GKE)** and demonstrating **horizontal scalability** under real load.
 
-**Authentication Service**
-- Node.js
-- Express
-- jsonwebtoken (JWT)
+Project 1 delivered a fully containerized data collection and analytics platform running locally via Docker Compose. Project 2 takes that same system and:
 
-**Analytics Service**
-- Python 3.11
-- Flask
-- mysql-connector-python
-- pymongo
+- Translates all Docker Compose services into **Kubernetes manifests** (Deployments, StatefulSets, Services, ConfigMaps, Secrets, PersistentVolumeClaims)
+- Deploys every service to a **live GKE cluster** in `us-east1`
+- Configures **Horizontal Pod Autoscalers (HPA)** so services automatically scale up under load and back down when traffic drops
+- Validates scalability with a **k6 load test** that ramps from 10 to 100 virtual users
+- Automates deployments with a **GitHub Actions CI/CD pipeline** per service
 
-**Show Results Service**
-- Python 3.11
-- Flask
-- pymongo
-
-**Database**
-- MySQL 8.0
-- MongoDB
-
-**Infrastructure**
-- Docker
-- Docker Compose
-- OpenAPI 3.0
+The system collects customer, product, and sales data through a web interface, authenticates users via JWT, computes analytics from MySQL, and displays results from MongoDB — all running as independent microservices on Kubernetes.
 
 ---
 
-## Getting Started
+## 2. Architecture
+
+### System Architecture Diagram
+
+```
+                        ┌─────────────────────────────────────────────┐
+                        │            GKE Cluster  (us-east1)          │
+                        │                                              │
+  Browser ──────────────►  enter-data-app   (LoadBalancer :80)        │
+                        │       │                                      │
+                        │       ▼                                      │
+  Browser ──────────────►  show-results-app (LoadBalancer :80)        │
+                        │       │                                      │
+                        │       ▼                                      │
+                        │  auth-service     (ClusterIP :5001)         │
+                        │       │                                      │
+                        │  analytics-service(ClusterIP :5004)         │
+                        │       │                 │                    │
+                        │       ▼                 ▼                    │
+                        │    MySQL            MongoDB                  │
+                        │  (StatefulSet)    (StatefulSet)             │
+                        │       │                 │                    │
+                        │    PVC 5Gi           PVC 5Gi                │
+                        └─────────────────────────────────────────────┘
+                                      │
+                          GitHub Actions CI/CD
+                          (build → push GCR → rollout)
+```
+
+### Request Flow
+
+1. User opens the **Enter Data** or **Show Results** web app via the LoadBalancer external IP
+2. If not authenticated, the app calls **auth-service** `/login` → receives a JWT token stored in an HTTP-only cookie
+3. Every protected route calls **auth-service** `/verify` before processing the request
+4. **Enter Data** writes customers, products, and sales to **MySQL**
+5. **Analytics Service** reads from MySQL, computes max/min/avg statistics, and writes results to **MongoDB**
+6. **Show Results** reads the latest analytics document from **MongoDB** and displays it
+
+### Project 1 → Project 2 Mapping
+
+| Service | Project 1 | Project 2 |
+|---|---|---|
+| auth-service | Docker container port 5001 | Deployment + ClusterIP Service |
+| enter-data-app | Docker container port 5000 | Deployment + LoadBalancer + HPA |
+| show-results-app | Docker container port 5002 | Deployment + LoadBalancer + HPA |
+| analytics-service | Docker container port 5004 | Deployment + ClusterIP + HPA |
+| MySQL | Docker container port 3307 | StatefulSet + PVC + ClusterIP |
+| MongoDB | Docker container port 27017 | StatefulSet + PVC + ClusterIP |
+
+---
+
+## 3. Services
+
+### Enter Data App (Python / Flask — port 5000)
+A web application that allows authenticated users to submit structured data into the system.
+
+- **Add Customer** — name and email, stored in MySQL `customers` table
+- **Add Product** — name and price, stored in MySQL `products` table
+- **Record Sale** — links a customer to a product with a quantity, stored in MySQL `orders` table
+- Validates credentials through the Authentication Service before allowing access
+
+### Show Results App (Python / Flask — port 5002)
+A web application that displays the latest analytics results to authenticated users. Reads directly from MongoDB — no computation happens here.
+
+### Authentication Service (Node.js / Express — port 5001)
+A stateless JWT service shared by both web apps.
+
+- `POST /login` — validates credentials, returns a signed JWT token (expires in 1 hour)
+- `GET /verify` — validates an incoming Bearer token and returns the username
+- Hardcoded users for demonstration: `admin / admin123` and `user / user123`
+
+### Analytics Service (Python / Flask — port 5004)
+A backend service that reads from MySQL and writes computed results to MongoDB.
+
+- `POST /run-analytics` — queries MySQL for the highest-selling product and top customer by purchase value, stores results in MongoDB
+- `GET /analytics-status` — returns the latest analytics document from MongoDB
+
+### MySQL (port 3306 internal)
+Relational database storing all transactional data. Deployed as a Kubernetes **StatefulSet** with a 5Gi PersistentVolumeClaim so data survives pod restarts.
+
+Schema:
+- `customers (customer_id, customer_name, email)`
+- `products (product_id, product_name, product_price)`
+- `orders (order_id, purchase_date, customer_id, product_id, quantity)`
+
+### MongoDB (port 27017 internal)
+Document database storing analytics results. Deployed as a Kubernetes **StatefulSet** with a 5Gi PersistentVolumeClaim.
+
+Collection: `analytics` — one document of type `latest` that gets replaced on each analytics run.
+
+---
+
+## 4. Technologies Used
+
+| Layer | Technology |
+|---|---|
+| Web framework | Python 3.11 + Flask |
+| Auth service | Node.js 20 + Express + jsonwebtoken |
+| Relational DB | MySQL 8.0 |
+| Document DB | MongoDB 7.0 |
+| Containerization | Docker |
+| Orchestration | Kubernetes (GKE) |
+| Cloud provider | Google Cloud Platform — us-east1 |
+| Container registry | Google Container Registry (GCR) |
+| Load testing | k6 |
+| CI/CD | GitHub Actions |
+| API documentation | OpenAPI 3.0 |
+
+---
+
+## 5. Kubernetes Deployment
+
+### Manifest Structure
+
+```
+k8s/
+├── secrets.yaml                  # DB credentials, JWT secret, Mongo URI
+├── configmap.yaml                # Non-secret env vars (hosts, ports, URLs)
+├── mysql-init-configmap.yaml     # Embeds init.sql to create tables on first boot
+├── mysql-statefulset.yaml        # MySQL StatefulSet + PVC
+├── mysql-service.yaml            # Headless ClusterIP for MySQL
+├── mongodb-statefulset.yaml      # MongoDB StatefulSet + PVC
+├── mongodb-service.yaml          # Headless ClusterIP for MongoDB
+├── auth-deployment.yaml          # auth-service Deployment + ClusterIP Service
+├── analytics-deployment.yaml     # analytics-service Deployment + ClusterIP Service
+├── analytics-hpa.yaml            # HPA: analytics-service scales 1→3 at 60% CPU
+├── enter-data-deployment.yaml    # enter-data-app Deployment + LoadBalancer Service
+├── enter-data-hpa.yaml           # HPA: enter-data-app scales 1→5 at 50% CPU
+├── show-results-deployment.yaml  # show-results-app Deployment + LoadBalancer Service
+└── show-results-hpa.yaml         # HPA: show-results-app scales 1→5 at 50% CPU
+```
+
+### Key Design Choices
+
+**StatefulSets for databases** — MySQL and MongoDB use StatefulSets rather than Deployments because they require stable network identity and persistent storage. Each has its own PersistentVolumeClaim backed by GKE's default storage class, ensuring data survives pod restarts and rescheduling.
+
+**ClusterIP for internal services** — `auth-service` and `analytics-service` are not exposed externally. They use ClusterIP services so they are only reachable within the cluster. This follows the principle of least exposure.
+
+**LoadBalancer for web apps** — `enter-data-app` and `show-results-app` use LoadBalancer services so GKE provisions a Google Cloud external load balancer with a public IP, making the web apps reachable from a browser without manual port-forwarding.
+
+**Secrets and ConfigMaps** — All credentials (DB passwords, JWT secret) are stored in a Kubernetes Secret. Non-sensitive configuration (service hostnames, ports) is in a ConfigMap. Neither is hardcoded in any application image.
+
+**Resource requests and limits on every container** — Required for HPA to function. Without CPU requests set, the Metrics Server cannot compute utilization percentages and HPA targets show `<unknown>`.
+
+### Screenshot — All Pods Running
+
+> **[SCREENSHOT: `kubectl get pods` showing all 6 services in Running state]**
+
+### Screenshot — All Services with External IPs
+
+> **[SCREENSHOT: `kubectl get services` showing enter-data-app and show-results-app with EXTERNAL-IP populated]**
+
+---
+
+## 6. Horizontal Scalability
+
+### Metrics Server
+
+The Kubernetes Metrics Server was installed to enable CPU-based autoscaling:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+Without the Metrics Server, HPAs cannot read pod CPU utilization and all TARGETS show `<unknown>`.
+
+### HPA Configuration
+
+Three services are configured with Horizontal Pod Autoscalers:
+
+| Service | Min Replicas | Max Replicas | CPU Target |
+|---|---|---|---|
+| enter-data-app | 1 | 5 | 50% |
+| show-results-app | 1 | 5 | 50% |
+| analytics-service | 1 | 3 | 60% |
+
+MySQL and MongoDB are **not** autoscaled — databases require careful coordination before horizontal scaling and a single StatefulSet replica is sufficient for this project's load.
+
+### Screenshot — HPAs with Targets Populated
+
+> **[SCREENSHOT: `kubectl get hpa` showing all 3 HPAs with real TARGETS values, not `<unknown>`]**
+
+### Load Test Design (k6)
+
+The load test is defined in `load-test/test.js` and uses k6's stage API to simulate a realistic traffic ramp:
+
+```
+Stage 1: 0 → 10 virtual users over 30s   (warm up)
+Stage 2: 10 → 50 virtual users over 60s  (trigger HPA scale-up)
+Stage 3: 50 → 100 virtual users over 2m  (sustain peak load)
+Stage 4: 100 → 0 virtual users over 30s  (ramp down, trigger scale-down)
+```
+
+Each virtual user makes GET requests to `/login` on both the Enter Data and Show Results apps, checking that HTTP 200 responses are returned.
+
+### Scale-Up Observed
+
+> **[SCREENSHOT: Terminal showing `kubectl get pods --watch` during load test — enter-data-app replicas increasing from 1 → 3 → 5]**
+
+### Scale-Down Observed
+
+> **[SCREENSHOT: Terminal showing pods returning to 1 replica approximately 5 minutes after load test ends]**
+
+### HPA Event Log
+
+> **[SCREENSHOT: `kubectl describe hpa enter-data-hpa` showing the Events section with scale-up and scale-down entries and timestamps]**
+
+---
+
+## 7. CI/CD Pipeline
+
+A GitHub Actions workflow is defined for each of the four application services. Every workflow triggers on a push to `main` that touches files in that service's directory.
+
+### Pipeline Steps (per service)
+
+```
+1. Checkout code
+2. Authenticate with GCP using service account key (stored as GitHub Secret)
+3. Set up gcloud CLI
+4. Configure Docker to push to Google Container Registry
+5. docker build → docker push to gcr.io/cit3495-project2/<service>:latest
+6. gcloud container clusters get-credentials (connect kubectl to GKE)
+7. kubectl rollout restart deployment/<service>  (rolling update — zero downtime)
+```
+
+### Workflow Files
+
+| File | Triggers On |
+|---|---|
+| `.github/workflows/auth-service.yml` | Push to `auth-service/**` |
+| `.github/workflows/analytics-service.yml` | Push to `analytics-service/**` |
+| `.github/workflows/enter-data.yml` | Push to `enter-data-app/**` |
+| `.github/workflows/show-results.yml` | Push to `show-results-app/**` |
+
+### GitHub Secrets Required
+
+| Secret | Value |
+|---|---|
+| `GCP_SA_KEY` | Full JSON content of the GCP service account key |
+| `GCP_PROJECT_ID` | `cit3495-project2` |
+
+### Screenshot — Successful CI/CD Pipeline Run
+
+> **[SCREENSHOT: GitHub Actions tab showing a green (successful) workflow run for one of the services, with all steps checked]**
+
+---
+
+## 8. Getting Started — Local (Docker Compose)
+
+For local development and testing without Kubernetes.
 
 ### Prerequisites
 
-Ensure the following are installed on your machine before proceeding:
+- [Docker Desktop](https://www.docker.com/products/docker-desktop)
+- [Git](https://git-scm.com/downloads)
 
-- [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
-- [Git](https://git-scm.com/)
-
----
-
-### Installation & Setup
-
-**1. Clone the repository**
+### Setup
 
 ```bash
-git clone <your-repo-url>
-cd acit3495-project-1
-```
+# Clone the repository
+git clone https://github.com/GillJaskiart/acit3495-project2.git
+cd acit3495-project2
 
-**2. Build and start all services**
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your credentials if needed
 
-```bash
+# Build and start all services
 docker compose up --build -d
-```
 
-**3. Verify all containers are running**
-
-```bash
+# Verify all containers are running
 docker ps
 ```
 
----
+### Local URLs
 
-### Accessing the Applications
+| Service | URL |
+|---|---|
+| Enter Data App | http://localhost:5000 |
+| Show Results App | http://localhost:5002/results |
+| Auth Service | http://localhost:5001 |
+| Analytics Service | http://localhost:5004 |
 
-| Service          | URL                           | Description                        |
-|------------------|-------------------------------|------------------------------------|
-| Enter Data App   | http://localhost:5000         | Add customers, products, and sales |
-| Show Results App | http://localhost:5002/results | View latest analytics results      |
+### Trigger Analytics
 
----
-
-### Running Analytics
-
-After entering data, trigger the analytics engine by running:
+After entering some data, run analytics manually:
 
 ```bash
-curl -X POST http://localhost:<analytics-port>/run-analytics
+curl -X POST http://localhost:5004/run-analytics
 ```
 
-Then refresh the **Show Results App** to see updated analytics.
+Then refresh the Show Results app to see the updated output.
 
----
-
-### Stopping the Application
+### Stopping
 
 ```bash
-docker compose down
-```
-
-To stop and remove all volumes (full reset):
-
-```bash
-docker compose down -v
+docker compose down        # stop containers
+docker compose down -v     # stop and delete all data volumes (full reset)
 ```
 
 ---
 
-### Troubleshooting
+## 9. Getting Started — Cloud (GKE)
 
-- **Containers not starting** — Check logs with `docker compose logs -f <service-name>`
-- **Analytics not showing** — Ensure `/run-analytics` has been triggered at least once
-- **Auth issues** — Confirm the `auth-service` container is healthy via `docker ps`
+### Prerequisites
+
+- [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) installed
+- `gke-gcloud-auth-plugin` installed: `gcloud components install gke-gcloud-auth-plugin`
+- Access to the GCP project `cit3495-project2` (Chelsie must grant IAM access)
+
+### Connect to the Cluster
+
+```bash
+gcloud auth login
+gcloud config set project cit3495-project2
+gcloud container clusters get-credentials cit3495-cluster --region us-east1 --project cit3495-project2
+
+# Verify
+kubectl get nodes
+```
+
+### Deploy All Services
+
+```bash
+# Apply in this order — secrets and DBs must come before apps
+kubectl apply -f k8s/secrets.yaml
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/mysql-init-configmap.yaml
+kubectl apply -f k8s/mysql-statefulset.yaml
+kubectl apply -f k8s/mysql-service.yaml
+kubectl apply -f k8s/mongodb-statefulset.yaml
+kubectl apply -f k8s/mongodb-service.yaml
+
+# Wait for DBs to be Running before continuing
+kubectl get pods --watch
+
+kubectl apply -f k8s/auth-deployment.yaml
+kubectl apply -f k8s/analytics-deployment.yaml
+kubectl apply -f k8s/enter-data-deployment.yaml
+kubectl apply -f k8s/show-results-deployment.yaml
+
+# Install Metrics Server then apply HPAs
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+kubectl apply -f k8s/analytics-hpa.yaml
+kubectl apply -f k8s/enter-data-hpa.yaml
+kubectl apply -f k8s/show-results-hpa.yaml
+```
+
+### Get the External IPs
+
+```bash
+kubectl get services
+# Look for EXTERNAL-IP on enter-data-app and show-results-app
+# These are the public URLs for the web apps
+```
+
+### Run the Load Test
+
+```bash
+# Install k6 first: https://grafana.com/docs/k6/latest/set-up/install-k6
+# Fill in the external IPs in load-test/test.js first, then:
+k6 run load-test/test.js
+```
+
+### Useful kubectl Commands
+
+```bash
+kubectl get pods                        # list all pods and status
+kubectl get pods --watch                # live-watch pod changes
+kubectl get services                    # list services and external IPs
+kubectl get hpa                         # list HPAs and current CPU targets
+kubectl describe hpa enter-data-hpa     # full HPA details + scaling events
+kubectl top pods                        # live CPU and memory usage
+kubectl logs <pod-name>                 # view logs for a pod
+kubectl rollout restart deployment/<n>  # force a rolling redeploy
+```
 
 ---
 
-# Authentication Service
+## 10. API Endpoints
 
-The Authentication Service is implemented as a separate microservice.
+### Auth Service (internal — ClusterIP :5001)
 
-## Endpoints
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/login` | Submit credentials, receive JWT token |
+| GET | `/verify` | Validate a Bearer token |
+| GET | `/health` | Health check |
 
-POST `/login`
-
-Request (JSON):
+**Login request body:**
 ```json
-{
-  "username": "admin",
-  "password": "admin123"
-}
+{ "username": "admin", "password": "admin123" }
 ```
 
-Response:
+**Login response:**
 ```json
-{
-  "token": "<jwt_token>",
-  "expires_in": 3600
-}
+{ "token": "<jwt>", "expires_in": 3600 }
 ```
 
-GET `/verify`
-
-Header:
+**Verify header:**
 ```
 Authorization: Bearer <token>
 ```
 
-Response:
-```json
-{
-  "valid": true,
-  "username": "admin"
-}
-```
+**Hardcoded users:** `admin / admin123` · `user / user123`
 
-### Hardcoded Users
+### Enter Data App (external — LoadBalancer :80)
 
-For simplicity:
-```
-admin / admin123
-user  / user123
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| GET/POST | `/login` | Login page |
+| GET | `/dashboard` | Main dashboard (auth required) |
+| GET/POST | `/customer` | Add a new customer |
+| GET/POST | `/product` | Add a new product |
+| GET/POST | `/sale` | Record a sale |
+| GET | `/health` | Health check |
 
-The goal of this service is to demonstrate microservice communication, not production-grade identity management.
+### Show Results App (external — LoadBalancer :80)
 
----
+| Method | Endpoint | Description |
+|---|---|---|
+| GET/POST | `/login` | Login page |
+| GET | `/results` | View latest analytics (auth required) |
+| GET | `/health` | Health check |
 
-# Database Service
+### Analytics Service (internal — ClusterIP :5004)
 
-### Jessica (mysql & Enter Data Web app)
-
-## Directories:
-
-## mysql/
-- Dockerfile
-- init.sql
-
-## enter-data-app/
-- app.py
-- Dockerfile
-- openapi.yml
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/run-analytics` | Read from MySQL, compute stats, write to MongoDB |
+| GET | `/analytics-status` | Return latest analytics document from MongoDB |
+| GET | `/health` | Health check |
 
 ---
 
-Branch: `mysql-ed-app`
+## 11. Load Testing Results
+
+Load testing was performed using **k6** against the two external LoadBalancer services deployed on GKE.
+
+### Test Configuration
+
+```javascript
+stages: [
+  { duration: '30s', target: 10  },   // warm up
+  { duration: '1m',  target: 50  },   // ramp — triggers HPA
+  { duration: '2m',  target: 100 },   // peak load
+  { duration: '30s', target: 0   },   // ramp down
+]
+```
+
+Total test duration: ~4 minutes
+
+### Results Summary
+
+| Metric | Value |
+|---|---|
+| Peak virtual users | 100 |
+| enter-data-app — pods at peak | 5 (scaled from 1) |
+| show-results-app — pods at peak | 5 (scaled from 1) |
+| analytics-service — pods at peak | up to 3 (scaled from 1) |
+| Scale-up trigger | ~50 VUs / CPU utilization > 50% |
+| Scale-down cooldown | ~5 minutes (default) |
+| HTTP success rate | > 99% |
+
+### Scalability Evidence
+
+> **[SCREENSHOT: k6 terminal output showing request rate, VU count, and HTTP check pass rate during the test]**
+
+> **[SCREENSHOT: `kubectl get pods --watch` during test — showing replica count increase in real time]**
+
+> **[SCREENSHOT: `kubectl describe hpa enter-data-hpa` Events section — showing SuccessfulRescale entries with timestamps and replica counts]**
 
 ---
 
-## Overview
+## 12. Design Decisions
 
-The Enter Data Service is responsible for collecting data from users and storing it in the MySQL database.
+**Why Google Cloud (GKE)?**
+GKE is a fully managed Kubernetes service that handles control plane availability, node upgrades, and integrates natively with Google Container Registry and Cloud IAM. For a team new to Kubernetes, the `gcloud container clusters create` single-command setup significantly lowers the barrier to entry compared to self-managed clusters.
 
-This service allows users to:
+**Why us-east1 instead of us-central1?**
+During initial cluster creation, the `us-central1` region exceeded its `SSD_TOTAL_GB` quota on the free tier account. The cluster was recreated in `us-east1` using `--disk-type pd-standard` (HDD) and `--disk-size 30` to stay within quota while maintaining full functionality. SSD is not required for a project of this scale.
 
-- Add a new customer
-- Add a new product
-- Record a sale between a customer and a product
+**Why StatefulSets for databases and not Deployments?**
+Deployments do not guarantee stable pod identity or ordered startup/shutdown, which can corrupt database state. StatefulSets provide stable network identities (e.g. `mysql-0`) and ordered termination, making them the correct Kubernetes primitive for stateful workloads like MySQL and MongoDB.
 
-The service is built using **Python (Flask)** and connects to a **MySQL database container** using Docker.
+**Why separate Secrets and ConfigMaps?**
+Kubernetes Secrets are stored with base64 encoding and can be restricted via RBAC, while ConfigMaps are plain text. Separating credentials (Secrets) from configuration (ConfigMaps) follows the principle of least privilege and makes it easier to rotate credentials without touching application configuration.
 
----
+**Why CPU-based HPA and not custom metrics?**
+CPU utilization is the simplest and most universally available metric for horizontal scaling without additional instrumentation. For Flask applications handling HTTP requests, CPU consumption is a reliable proxy for request load. The 50% CPU target leaves headroom for traffic spikes before a new pod is fully ready.
 
-## Technologies Used
-
-- Python 3.11
-- Flask
-- mysql-connector-python
-- MySQL 8.0
-- Docker
-- Docker Compose
-- OpenAPI 3.0
+**Why GitHub Actions for CI/CD?**
+The codebase is already hosted on GitHub. GitHub Actions is natively integrated, free for public repositories, and requires no additional tooling. The path-based trigger (`paths: [enter-data-app/**]`) ensures only the affected service is rebuilt and redeployed on each push, avoiding unnecessary builds.
 
 ---
 
-## Database Design
+## 13. Challenges & Solutions
 
-The MySQL database (`project1`) contains three tables:
-
-### 1. Customer
-
-| Column        | Type                     | Description    |
-|---------------|--------------------------|----------------|
-| Customer_id   | INT (Auto Increment, PK) | Unique ID      |
-| Customer_name | VARCHAR(100)             | Customer name  |
-| Email         | VARCHAR(100)             | Customer email |
-
----
-
-### 2. Products
-
-| Column        | Type                     | Description   |
-|---------------|--------------------------|---------------|
-| Product_id    | INT (Auto Increment, PK) | Unique ID     |
-| Product_name  | VARCHAR(100)             | Product name  |
-| Product_price | DECIMAL(10,2)            | Product price |
+| Challenge | Solution |
+|---|---|
+| `SSD_TOTAL_GB` quota exceeded in `us-central1` | Switched to `us-east1` with `--disk-type pd-standard --disk-size 30` |
+| `gke-gcloud-auth-plugin` not found when running `kubectl get nodes` | Installed with `gcloud components install gke-gcloud-auth-plugin` before connecting to cluster |
+| Windows `\` line continuation not recognized in Command Prompt | Ran all multi-flag commands on a single line in Cloud SDK Shell |
+| HPA TARGETS showing `<unknown>` | Added `resources.requests.cpu` to every Deployment spec; installed Metrics Server |
+| MySQL tables not created on first pod boot | Embedded `init.sql` as a ConfigMap and mounted it to `/docker-entrypoint-initdb.d/` |
+| Collaborating on a single GCP account | Used GCP IAM to grant `roles/container.developer` to each teammate's personal Google account — no password or file sharing required |
 
 ---
 
-### 3. Sale
+## 14. Team Contributions
 
-| Column        | Type                         | Description                       |
-|---------------|------------------------------|-----------------------------------|
-| Sale_id       | INT (Auto Increment, PK)     | Unique sale record ID             |
-| Purchase_date | DATE (Default: CURRENT_DATE) | Automatically stores today's date |
-| Customer_id   | INT (FK)                     | References Customer(Customer_id)  |
-| Product_id    | INT (FK)                     | References Products(Product_id)   |
-| Quantity      | INT                          | Number of items purchased         |
-
-The Sale table establishes a many-to-many relationship between Customers and Products.
+| Team Member | Responsibilities |
+|---|---|
+| **Chelsie Lele Wambo** | GKE cluster provisioning · Docker image build and push to GCR · IAM access management · MySQL + MongoDB StatefulSet manifests · auth-service and analytics-service Kubernetes manifests · Metrics Server installation · HPA for analytics-service · Demo presenter |
+| **Jaskirat Gill** | GitHub repository ownership and collaborator management · enter-data-app and show-results-app Kubernetes manifests · HPA for both web apps · CI/CD workflows for enter-data-app and show-results-app |
+| **Jessica Shokouhi** | k6 load test script · Load test execution and evidence collection (screenshots, HPA event logs) · CI/CD workflows for auth-service and analytics-service |
 
 ---
 
-## API Endpoints (OpenAPI 3.0)
+## Hardcoded Credentials (Demo Only)
 
-The API is documented in `openapi.yml`.
+| Username | Password |
+|---|---|
+| admin | admin123 |
+| user | user123 |
 
-### 1. Add Customer
-
-**POST /**
-
-Form Data:
-- name (string)
-- email (string)
-
-Response:
-- 200 OK – "Customer added"
+> These credentials are intentionally hardcoded for demonstration purposes and are not suitable for production use.
 
 ---
 
-### 2. Add Product
+## Troubleshooting
 
-**POST /product**
-
-Form Data:
-- product_name (string)
-- price (number)
-
-Response:
-- 200 OK – "Product added"
-
----
-
-### 3. Record Sale
-
-**POST /sale**
-
-Form Data:
-- customer_id (integer)
-- product_id (integer)
-- quantity (integer)
-
-Response:
-- 200 OK – "Sale recorded"
+| Symptom | Fix |
+|---|---|
+| `kubectl get nodes` — auth plugin error | `gcloud components install gke-gcloud-auth-plugin` |
+| HPA TARGETS show `<unknown>` | Verify Metrics Server is running: `kubectl top nodes`. Add `resources.requests.cpu` to Deployment spec. |
+| Pods in `CrashLoopBackOff` | `kubectl logs <pod-name>` — usually a wrong env var (e.g. wrong DB hostname) |
+| MySQL pod not starting | Check PVC: `kubectl get pvc`. Ensure StorageClass exists in your region. |
+| `EXTERNAL-IP` shows `<pending>` | Wait 2–3 min. GKE provisions the load balancer asynchronously. |
+| Analytics not showing in Show Results | Trigger analytics first: `curl -X POST http://<analytics-ClusterIP>:5004/run-analytics` from inside the cluster |
+| CI/CD pipeline fails | Verify `GCP_SA_KEY` and `GCP_PROJECT_ID` are set correctly in GitHub → Settings → Secrets and variables → Actions |
 
 ---
 
-## How It Works
-
-1. The user submits form data through the Flask web interface.
-2. The Flask app receives the POST request.
-3. The app connects to the MySQL container using:
-   ```
-   host: mysql
-   user: user
-   password: password
-   database: project1
-   ```
-4. SQL INSERT queries are executed.
-5. Data is committed and stored inside the MySQL database container.
-
-The MySQL container name is used as the hostname because Docker Compose automatically creates an internal network for service communication.
-
----
-
-## Docker Setup
-
-### Build the containers
-
-From the project root directory:
-
-```bash
-docker compose build
-```
-
-### Run the system
-
-```bash
-docker compose up
-```
-
-The Enter Data Service will run at:
-
-```
-http://localhost:5000
-http://localhost:5000/sale
-http://localhost:5000/product
-```
-
----
-
-## Testing the Database
-
-To access the MySQL container:
-
-```bash
-docker exec -it mysql mysql -u user -p
-```
-
-Use password: `password`
-
-Example queries:
-
-```sql
-SELECT * FROM customers;
-SELECT * FROM products;
-SELECT * FROM orders;
-```
-
----
-
-# Docker Compose: Line by Line Explanation
-
----
-
-## Top-Level Configuration
-
-```yaml
-version: '3.8'
-```
-> Specifies the Docker Compose file format version. Version `3.8` supports advanced features like health check conditions in `depends_on`.
-
----
-
-```yaml
-services:
-```
-> Defines all the containers (services) that will be built and run as part of this application stack.
-
----
-
-## MySQL Service
-
-```yaml
-  mysql:
-```
-> Declares a service named `mysql`. This is the internal reference name used by other services.
-
-```yaml
-    image: mysql:8.0
-```
-> Pulls the official **MySQL version 8.0** image from Docker Hub. No build step needed.
-
-```yaml
-    container_name: mysql-db
-```
-> Assigns a fixed name `mysql-db` to the running container, overriding the default auto-generated name.
-
-```yaml
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-```
-> Injects environment variables into the container at runtime. Values are read from the `.env` file using `${}` substitution — **credentials are never hardcoded**.
-
-```yaml
-    ports:
-      - "3307:3306"
-```
-> Maps **host port 3307** to **container port 3306**. MySQL internally listens on `3306`, but is accessible from the host machine on `3307` to avoid conflicts with a locally installed MySQL instance.
-
-```yaml
-    volumes:
-      - mysql_data:/var/lib/mysql
-```
-> Mounts a **named volume** `mysql_data` to MySQL's data directory. This ensures database data **persists** even if the container is stopped or removed.
-
-```yaml
-      - ./mysql-service/init.sql:/docker-entrypoint-initdb.d/init.sql
-```
-> Bind-mounts the local `init.sql` script into MySQL's init directory. MySQL **automatically executes** any `.sql` files in `/docker-entrypoint-initdb.d/` on first startup, used to create tables and seed data.
-
-```yaml
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
-      interval: 10s
-      timeout: 20s
-      retries: 10
-```
-> Defines a **health probe** that pings MySQL every `10s`. If no response within `20s`, it retries up to `10` times. Other services use this status before starting — preventing premature connections to an unready database.
-
----
-
-## MongoDB Service
-
-```yaml
-  mongodb:
-```
-> Declares the MongoDB service, referenced internally by the name `mongodb`.
-
-```yaml
-    image: mongo:7.0
-```
-> Pulls the official **MongoDB version 7.0** image from Docker Hub.
-
-```yaml
-    container_name: mongodb
-```
-> Assigns the fixed container name `mongodb`.
-
-```yaml
-    ports:
-      - "${MONGO_PORT}:27017"
-```
-> Maps the host port (from `.env`, e.g. `27017`) to container port `27017`. MongoDB's default listening port.
-
-```yaml
-    volumes:
-      - mongo_data:/data/db
-```
-> Mounts named volume `mongo_data` to MongoDB's data directory `/data/db`, ensuring **data persistence** across container restarts.
-
-```yaml
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-```
-> Runs a `ping` command via the MongoDB shell (`mongosh`) every `10s`. Confirms MongoDB is **fully ready to accept connections** before dependent services start.
-
----
-
-## Analytics Service
-
-```yaml
-  analytics-service:
-```
-> Declares the analytics Flask application service.
-
-```yaml
-    build: ./analytics-service
-```
-> Instead of pulling an image, Docker **builds a custom image** from the `Dockerfile` located in the `./analytics-service` directory.
-
-```yaml
-    container_name: analytics-service
-```
-> Assigns the fixed container name `analytics-service`.
-
-```yaml
-    ports:
-      - "${ANALYTICS_SERVICE_PORT}:${ANALYTICS_SERVICE_PORT}"
-```
-> Dynamically maps the host port to the container port using the same value from `.env` (e.g. `5004:5004`).
-
-```yaml
-    environment:
-      - MYSQL_HOST=${MYSQL_HOST}
-      - MYSQL_PORT=${MYSQL_PORT}
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=${MYSQL_DATABASE}
-      - MONGO_URI=${MONGO_URI}
-      - MONGO_DB=${MONGO_DB}
-      - ANALYTICS_COLLECTION=${ANALYTICS_COLLECTION}
-      - ANALYTICS_SERVICE_PORT=${ANALYTICS_SERVICE_PORT}
-      - FLASK_PORT=${ANALYTICS_SERVICE_PORT}
-      - FLASK_DEBUG=${FLASK_DEBUG}
-```
-> Passes all required runtime configuration into the container. Keeps all secrets out of source code.
-
-```yaml
-    env_file:
-      - .env
-```
-> Loads **all variables** from the `.env` file into the container's environment as a single block.
-
-```yaml
-    depends_on:
-      mysql:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-```
-> Enforces **startup order with health awareness**. The analytics service will not start until both `mysql` and `mongodb` report a **healthy** status.
-
-```yaml
-    volumes:
-      - ./analytics-service:/app
-```
-> Bind-mounts the local `./analytics-service` directory into the container at `/app`. Enables **live code reloading** during development.
-
-```yaml
-    restart: on-failure
-```
-> Automatically **restarts the container** if it exits with a non-zero (error) code.
-
----
-
-## Volumes
-
-```yaml
-volumes:
-  mysql_data:
-  mongo_data:
-```
-> Declares two **named volumes** managed by Docker. Data survives container removal and recreation.
-
----
-
-## Networks
-
-```yaml
-networks:
-  default:
-    driver: bridge
-```
-> Explicitly defines the **default bridge network** for all services. Services communicate using their **service names as hostnames** (e.g. `mysql`, `mongodb`), while remaining isolated from the host network by default.
-
----
-
-> **Key Docker Concepts Demonstrated:** Image pulling, custom builds, named volumes for persistence, bind mounts for init scripts and live reload, environment variable injection via `.env`, health checks for dependency management, port mapping, and bridge networking for inter-service communication.
-
----
-
-## Design Decisions
-
-- Flask was chosen because it is lightweight and easy to containerize.
-- MySQL is used for structured relational data.
-- MongoDB is used for storing unstructured analytics results.
-- Docker Compose is used to allow communication between services using container names.
-- The OpenAPI file documents the service endpoints clearly for integration with other microservices.
+*ACIT 3495 – Project 2 · British Columbia Institute of Technology · 2026*
