@@ -49,21 +49,21 @@ The system collects customer, product, and sales data through a web interface, a
 ```
                         ┌─────────────────────────────────────────────┐
                         │            GKE Cluster  (us-east1)          │
-                        │                                              │
+                        │                                             │
   Browser ──────────────►  enter-data-app   (LoadBalancer :80)        │
-                        │       │                                      │
-                        │       ▼                                      │
+                        │       │                                     │
+                        │       ▼                                     │
   Browser ──────────────►  show-results-app (LoadBalancer :80)        │
-                        │       │                                      │
-                        │       ▼                                      │
+                        │       │                                     │
+                        │       ▼                                     │
                         │  auth-service     (ClusterIP :5001)         │
-                        │       │                                      │
+                        │       │                                     │
                         │  analytics-service(ClusterIP :5004)         │
-                        │       │                 │                    │
-                        │       ▼                 ▼                    │
-                        │    MySQL            MongoDB                  │
+                        │       │                 │                   │
+                        │       ▼                 ▼                   │
+                        │    MySQL            MongoDB                 │
                         │  (StatefulSet)    (StatefulSet)             │
-                        │       │                 │                    │
+                        │       │                 │                   │
                         │    PVC 5Gi           PVC 5Gi                │
                         └─────────────────────────────────────────────┘
                                       │
@@ -192,7 +192,7 @@ k8s/
 
 ### Screenshot — All Services with External IPs
 
-> **[SCREENSHOT: `kubectl get services` showing enter-data-app and show-results-app with EXTERNAL-IP populated]**
+![kubectl get services screenshot showing enter-data-app and show-results-app with EXTERNAL-IP](./attatchments/kubectl-get-services.png)
 
 ---
 
