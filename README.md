@@ -248,6 +248,8 @@ Each virtual user makes GET requests to `/login` on both the Enter Data and Show
 ### HPA Event Log
 
 > **<img width="2164" height="998" alt="kubectl describe hpa enter-data-hpa" src="https://github.com/user-attachments/assets/6174dafe-06e3-4d6b-aa7d-bc08e9ad4be7" />**
+> **<img width="1834" height="826" alt="event log results" src="https://github.com/user-attachments/assets/ceb2e36e-2185-489a-ac16-55e102a3983d" />**
+
 
 ---
 
