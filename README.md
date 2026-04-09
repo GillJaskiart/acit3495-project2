@@ -222,7 +222,7 @@ MySQL and MongoDB are **not** autoscaled — databases require careful coordinat
 
 ### Screenshot — HPAs with Targets Populated
 
-> **[SCREENSHOT: `kubectl get hpa` showing all 3 HPAs with real TARGETS values, not `<unknown>`]**
+> **<img width="1248" height="322" alt="HPAs with Targets Populated" src="https://github.com/user-attachments/assets/8b2a73fe-c90a-4218-92bb-71236eb8090c" />**
 
 ### Load Test Design (k6)
 
@@ -239,15 +239,15 @@ Each virtual user makes GET requests to `/login` on both the Enter Data and Show
 
 ### Scale-Up Observed
 
-> **[SCREENSHOT: Terminal showing `kubectl get pods --watch` during load test — enter-data-app replicas increasing from 1 → 3 → 5]**
+> **<img width="1248" height="257" alt="scale up" src="https://github.com/user-attachments/assets/3b4682e7-dc63-4deb-a9d6-818127172ca0" />**
 
 ### Scale-Down Observed
 
-> **[SCREENSHOT: Terminal showing pods returning to 1 replica approximately 5 minutes after load test ends]**
+> **<img width="1248" height="585" alt="scale down" src="https://github.com/user-attachments/assets/42670cac-6ba3-427f-ace3-28f6bd5caec3" />**
 
 ### HPA Event Log
 
-> **[SCREENSHOT: `kubectl describe hpa enter-data-hpa` showing the Events section with scale-up and scale-down entries and timestamps]**
+> **<img width="2164" height="998" alt="kubectl describe hpa enter-data-hpa" src="https://github.com/user-attachments/assets/6174dafe-06e3-4d6b-aa7d-bc08e9ad4be7" />**
 
 ---
 
@@ -509,11 +509,12 @@ Total test duration: ~4 minutes
 
 ### Scalability Evidence
 
-> **[SCREENSHOT: k6 terminal output showing request rate, VU count, and HTTP check pass rate during the test]**
+> **<img width="1248" height="770" alt="k6-load-test-results" src="https://github.com/user-attachments/assets/41b7457d-a267-4a4c-afd2-b256968b63bf" />**
 
-> **[SCREENSHOT: `kubectl get pods --watch` during test — showing replica count increase in real time]**
+> **<img width="1248" height="912" alt="pods watch increase" src="https://github.com/user-attachments/assets/caa2d7d6-c8e5-4b09-8e5f-f6ad20d41580" />**
 
-> **[SCREENSHOT: `kubectl describe hpa enter-data-hpa` Events section — showing SuccessfulRescale entries with timestamps and replica counts]**
+> **<img width="1248" height="912" alt="pods watch increase" src="https://github.com/user-attachments/assets/1e893f6c-fb18-4888-9f35-578d1d911085" />**
+
 
 ---
 
