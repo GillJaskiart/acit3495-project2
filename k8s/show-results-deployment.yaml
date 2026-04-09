@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: show-results-app
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  selector:
+    matchLabels:
+      app: show-results-app
+  template:
+    metadata:
+      labels:
+        app: show-results-app
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: show-results-app
+        image: us-east1-docker.pkg.dev/cit3495-project2/cit3495-repo/show-results-app:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5002
+        envFrom:
+        - secretRef:
+            name: app-secrets
+        - configMapRef:
+            name: app-config
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+        # Only route traffic after Flask is up and MongoDB is reachable.
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 3
+        # Restart the pod if the app stops responding.
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          failureThreshold: 3
+          timeoutSeconds: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: show-results-app
+spec:
+  selector:
+    app: show-results-app
+  ports:
+  - port: 80
+    targetPort: 5002
+  type: LoadBalancer
+

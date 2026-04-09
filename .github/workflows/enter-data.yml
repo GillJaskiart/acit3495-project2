@@ -1,0 +1,38 @@
+name: Deploy enter-data-app
+
+on:
+  push:
+    branches: [main]
+    paths:
+    - enter-data-app/**
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        install_components: gke-gcloud-auth-plugin
+
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker us-east1-docker.pkg.dev
+
+    - name: Build and push image
+      run: |
+        docker build -t us-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cit3495-repo/enter-data-app:latest ./enter-data-app
+        docker push us-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cit3495-repo/enter-data-app:latest
+
+    - name: Deploy to GKE
+      run: |
+        gcloud container clusters get-credentials cit3495-cluster --region us-east1 --project ${{ secrets.GCP_PROJECT_ID }}
+        kubectl apply -f k8s/enter-data-deployment.yaml
+        kubectl apply -f k8s/enter-data-hpa.yaml
+        kubectl rollout restart deployment/enter-data-app
