@@ -253,7 +253,7 @@ Each virtual user makes GET requests to `/login` on both the Enter Data and Show
 
 ---
 
-## 7. CI/CD Pipeline
+## 7. CI/CD Pipeline 
 
 A GitHub Actions workflow is defined for each of the four application services. Every workflow triggers on a push to `main` that touches files in that service's directory.
 
@@ -285,9 +285,6 @@ A GitHub Actions workflow is defined for each of the four application services. 
 | `GCP_SA_KEY` | Full JSON content of the GCP service account key |
 | `GCP_PROJECT_ID` | `cit3495-project2` |
 
-### Screenshot — Successful CI/CD Pipeline Run
-
-> **[SCREENSHOT: GitHub Actions tab showing a green (successful) workflow run for one of the services, with all steps checked]**
 
 ---
 
