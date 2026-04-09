@@ -188,7 +188,7 @@ k8s/
 
 ### Screenshot — All Pods Running
 
-> **[SCREENSHOT: `kubectl get pods` showing all 6 services in Running state]**
+> **<img width="1144" height="254" alt="get pods" src="https://github.com/user-attachments/assets/2423fac2-dc1f-4d6b-ba9c-c8bd4eede4bd" />**
 
 ### Screenshot — All Services with External IPs
 
@@ -559,7 +559,7 @@ The codebase is already hosted on GitHub. GitHub Actions is natively integrated,
 |---|---|
 | **Chelsie Lele Wambo** | GKE cluster provisioning · Docker image build and push to GCR · IAM access management · MySQL + MongoDB StatefulSet manifests · auth-service and analytics-service Kubernetes manifests · Metrics Server installation · HPA for analytics-service · Demo presenter |
 | **Jaskirat Gill** | GitHub repository ownership and collaborator management · enter-data-app and show-results-app Kubernetes manifests · HPA for both web apps · CI/CD workflows for enter-data-app and show-results-app |
-| **Jessica Shokouhi** | k6 load test script · Load test execution and evidence collection (screenshots, HPA event logs) · CI/CD workflows for auth-service and analytics-service |
+| **Jessica Shokouhi** | k6 load test script · Load test execution and evidence collection (s, HPA event logs) · CI/CD workflows for auth-service and analytics-service |
 
 ---
 
