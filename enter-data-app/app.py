@@ -5,7 +5,6 @@ import os
 import logging
 from datetime import date, datetime
 
-
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
