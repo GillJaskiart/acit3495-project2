@@ -10,6 +10,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 db_config = {
     "host":     os.environ.get("MYSQL_HOST",     "mysql"),
     "user":     os.environ.get("MYSQL_USER",     "user"),

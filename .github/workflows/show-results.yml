@@ -2,7 +2,7 @@ name: Deploy show-results-app
 
 on:
   push:
-    branches: [main]
+    branches: [main, jaskirat]
     paths:
     - show-results-app/**
 
