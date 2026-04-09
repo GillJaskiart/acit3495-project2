@@ -2,7 +2,7 @@ name: Deploy enter-data-app
 
 on:
   push:
-    branches: [main, jaskirat]
+    branches: [main]
     paths:
     - enter-data-app/**
 

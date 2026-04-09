@@ -269,6 +269,8 @@ A GitHub Actions workflow is defined for each of the four application services. 
 7. kubectl rollout restart deployment/<service>  (rolling update — zero downtime)
 ```
 
+![pipelines](./attatchments/cicd.png)
+
 ### Workflow Files
 
 | File | Triggers On |
