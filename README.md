@@ -194,6 +194,28 @@ k8s/
 
 ![kubectl get services screenshot showing enter-data-app and show-results-app with EXTERNAL-IP](./attatchments/kubectl-get-services.png)
 
+### Web Applications — Live on GKE
+
+Both web applications were successfully deployed and reachable via their LoadBalancer external IPs. The screenshots below confirm the apps are publicly accessible and fully functional on the cluster.
+
+**kubectl get services — External IPs confirmed**
+
+> `enter-data-app` was assigned external IP `34.148.44.245` and `show-results-app` was assigned `34.23.29.245`. Internal services (`auth-service`, `analytics-service`, `mysql`, `mongodb`) correctly show no external IP — confirming they are cluster-internal only, as intended.
+
+![kubectl get services showing LoadBalancer external IPs for both web apps](./attachments/services_external_IP.png)
+
+**enter-data-app — live at `http://34.148.44.245`**
+
+> An authenticated user successfully recorded a sale through the live GKE deployment. The confirmation message and total value confirm the full request cycle completed: JWT login via auth-service → form submission → MySQL write → success response. The URL in the address bar confirms the app is serving from the real external IP.
+
+![enter-data-app running live on GKE — sale recorded successfully](./attachments/enter_data_service_IP.png)
+
+**show-results-app — live at `http://34.23.29.245/results`**
+
+> The analytics results page is reachable and rendering data from MongoDB. The "Last Updated" timestamp (`2026-04-08T16:07:38`) confirms analytics-service successfully computed results from MySQL, wrote them to MongoDB, and show-results-app retrieved and displayed them — the complete data pipeline is working end-to-end on the live cluster.
+
+![show-results-app running live on GKE — Analytics Results page](./attachments/show_results_IP.png)
+
 ---
 
 ## 6. Horizontal Scalability
@@ -269,7 +291,7 @@ A GitHub Actions workflow is defined for each of the four application services. 
 7. kubectl rollout restart deployment/<service>  (rolling update — zero downtime)
 ```
 
-![pipelines](./attatchments/cicd.png)
+![pipelines](./attachments/cicd.png)
 
 ### Workflow Files
 
