@@ -1,7 +1,7 @@
 # ACIT 3495 – Project 2: Kubernetes Deployment & Horizontal Scalability
 
 **Course:** ACIT 3495 – Advanced Topics in IT Infrastructure  
-**Team:** Salome Chelsie Lele Wambo - Jaskirat Gill - Jessica Shokouhi  
+**Team:** Salome Chelsie Lele Wambo · Jaskirat Gill · Jessica Shokouhi  
 **Repository:** [github.com/GillJaskiart/acit3495-project2](https://github.com/GillJaskiart/acit3495-project2)  
 **Cloud Provider:** Google Cloud Platform (GKE) — Region: `us-east1`
 
@@ -193,28 +193,6 @@ k8s/
 ### Screenshot — All Services with External IPs
 
 ![kubectl get services screenshot showing enter-data-app and show-results-app with EXTERNAL-IP](./attatchments/kubectl-get-services.png)
-
-### Web Applications — Live on GKE
-
-Both web applications were successfully deployed and reachable via their LoadBalancer external IPs. The screenshots below confirm the apps are publicly accessible and fully functional on the cluster.
-
-**kubectl get services — External IPs confirmed**
-
-> `enter-data-app` was assigned external IP `34.148.44.245` and `show-results-app` was assigned `34.23.29.245`. Internal services (`auth-service`, `analytics-service`, `mysql`, `mongodb`) correctly show no external IP — confirming they are cluster-internal only, as intended.
-
-![kubectl get services showing LoadBalancer external IPs for both web apps](./attatchments/services_external_IP.png)
-
-**enter-data-app — live at `http://34.148.44.245`**
-
-> An authenticated user successfully recorded a sale through the live GKE deployment. The confirmation message and total value confirm the full request cycle completed: JWT login via auth-service → form submission → MySQL write → success response. The URL in the address bar confirms the app is serving from the real external IP.
-
-![enter-data-app running live on GKE — sale recorded successfully](./attatchments/enter_data_service_IP.png)
-
-**show-results-app — live at `http://34.23.29.245/results`**
-
-> The analytics results page is reachable and rendering data from MongoDB. The "Last Updated" timestamp (`2026-04-08T16:07:38`) confirms analytics-service successfully computed results from MySQL, wrote them to MongoDB, and show-results-app retrieved and displayed them — the complete data pipeline is working end-to-end on the live cluster.
-
-![show-results-app running live on GKE — Analytics Results page](./attatchments/show_results_IP.png)
 
 ---
 
@@ -611,4 +589,4 @@ The codebase is already hosted on GitHub. GitHub Actions is natively integrated,
 
 ---
 
-*ACIT 3495 – Project 2 - British Columbia Institute of Technology - 2026*
+*ACIT 3495 – Project 2 · British Columbia Institute of Technology · 2026*
