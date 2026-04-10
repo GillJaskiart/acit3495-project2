@@ -192,7 +192,7 @@ k8s/
 
 ### Screenshot — All Services with External IPs
 
-![kubectl get services screenshot showing enter-data-app and show-results-app with EXTERNAL-IP](./attatchments/kubectl-get-services.png)
+![kubectl get services screenshot showing enter-data-app and show-results-app with EXTERNAL-IP](./attachments/kubectl-get-services.png)
 
 ### Web Applications — Live on GKE
 
